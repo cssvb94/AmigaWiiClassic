@@ -1,15 +1,4 @@
-#include <Arduino.h>
-#include <Wire.h>
-#include <WiiChuck.h>
-
-Accessory wiicontr;
-
-#define BTN_FIRE 2
-#define BTN_JUMP 3
-#define BTN_UP 4
-#define BTN_DOWN 5
-#define BTN_LEFT 6
-#define BTN_RIGHT 7
+#include "main_config.h"
 
 /*
 Amiga Joystick pinout
@@ -26,6 +15,9 @@ Amiga Joystick pinout
 SCL - green  - A4
 SDA - yellow - A5
 */
+
+void mapJoystickNormal(TwoButtonJoystick &j);
+JoyMappingFunc joyMappingFunc = mapJoystickNormal;
 
 void setup()
 {
