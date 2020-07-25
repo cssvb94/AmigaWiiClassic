@@ -72,6 +72,8 @@ const byte BTN_LEFT = 6;
 const byte BTN_RIGHT = 7;
 const byte BTN_JUMP = 8; // BTN2
 
+const byte PAD_POLLING_FREQ = 60U;
+
 /** Shift register output pin for CD32 mode
  * 
  * When in CD32 mode, button status is saved to an 8-bit register that gets

@@ -22,21 +22,30 @@ inline void buttonPress(byte pin)
     {
     case BTN_UP:
         fastDigitalWrite(BTN_UP, LOW);
+        // fastPinMode(BTN_UP, OUTPUT);
         break;
     case BTN_DOWN:
         fastDigitalWrite(BTN_DOWN, LOW);
+        // fastPinMode(BTN_DOWN, OUTPUT);
         break;
     case BTN_LEFT:
         fastDigitalWrite(BTN_LEFT, LOW);
+        // fastPinMode(BTN_LEFT, OUTPUT);
         break;
     case BTN_RIGHT:
         fastDigitalWrite(BTN_RIGHT, LOW);
+        // fastPinMode(BTN_RIGHT, OUTPUT);
         break;
     case BTN_FIRE:
         fastDigitalWrite(BTN_FIRE, LOW);
+        // fastPinMode(BTN_FIRE, OUTPUT);
         break;
     case BTN_JUMP:
+        // if (*state == ST_JOYSTICK)
+        // {
         fastDigitalWrite(BTN_JUMP, LOW);
+        // fastPinMode(BTN_JUMP, OUTPUT);
+        // }
         break;
     }
 }
@@ -47,22 +56,31 @@ inline void buttonRelease(byte pin)
     switch (pin)
     {
     case BTN_UP:
+        // fastPinMode(BTN_UP, OUTPUT);
         fastDigitalWrite(BTN_UP, HIGH);
         break;
     case BTN_DOWN:
+        // fastPinMode(BTN_DOWN, OUTPUT);
         fastDigitalWrite(BTN_DOWN, HIGH);
         break;
     case BTN_LEFT:
+        // fastPinMode(BTN_LEFT, OUTPUT);
         fastDigitalWrite(BTN_LEFT, HIGH);
         break;
     case BTN_RIGHT:
+        // fastPinMode(BTN_RIGHT, OUTPUT);
         fastDigitalWrite(BTN_RIGHT, HIGH);
         break;
     case BTN_FIRE:
+        // fastPinMode(BTN_FIRE, OUTPUT);
         fastDigitalWrite(BTN_FIRE, HIGH);
         break;
     case BTN_JUMP:
+        // if (*state == ST_JOYSTICK)
+        // {
+        // fastPinMode(BTN_JUMP, OUTPUT);
         fastDigitalWrite(BTN_JUMP, HIGH);
+        // }
         break;
     }
 }
@@ -84,7 +102,6 @@ void onPadModeChange()
 {
     if (fastDigitalRead(PIN_PADMODE) == LOW)
     {
-        debugln(F("CD32 mode"));
         fastPinMode(PIN_BTNREGCLK, INPUT);
         fastPinMode(PIN_BTNREGOUT, OUTPUT);
         if (!(*buttonsLive & 0x01))
@@ -98,13 +115,11 @@ void onPadModeChange()
 
         *isrButtons = *buttonsLive >> 1U;
         restoreClockInterrupt();
-
         *state = ST_CD32;
         fastDigitalWrite(LED_BUILTIN, HIGH);
     }
     else
     {
-        debugln(F("Joystick mode"));
         if (!(*buttonsLive & BTN_RED))
         {
             buttonPress(BTN_FIRE);
@@ -124,7 +139,6 @@ void onPadModeChange()
         }
         // Disable INT1
         suspendClockInterrupt();
-        // Set state to ST_JOYSTICK_TEMP
         *state = ST_JOYSTICK;
         fastDigitalWrite(LED_BUILTIN, LOW);
     }
@@ -162,8 +176,6 @@ inline void disableCD32Trigger()
 void handleJoystickButtons(const TwoButtonJoystick &j)
 {
     noInterrupts();
-    // if (*state == ST_JOYSTICK)
-    // {
     if (j.b1)
     {
         buttonPress(BTN_FIRE);
@@ -181,37 +193,28 @@ void handleJoystickButtons(const TwoButtonJoystick &j)
     {
         buttonRelease(BTN_JUMP);
     }
-    // }
     interrupts();
 }
 
 void handleCD32PADButtons()
 {
-    // Use the same logic as in handleJoystickButtons()
     noInterrupts();
-    // if (*state == ST_JOYSTICK)
-    if (*state == ST_CD32)
+    if (!(*buttonsLive & BTN_RED))
     {
-        /* Relying on buttonsLive guarantees we do the right thing even when
-		 * useAlternativeCd32Mapping is true
-		 */
-        if (!(*buttonsLive & BTN_RED))
-        {
-            buttonPress(BTN_FIRE);
-        }
-        else
-        {
-            buttonRelease(BTN_FIRE);
-        }
+        buttonPress(BTN_FIRE);
+    }
+    else
+    {
+        buttonRelease(BTN_FIRE);
+    }
 
-        if (!(*buttonsLive & BTN_BLUE))
-        {
-            buttonPress(BTN_JUMP);
-        }
-        else
-        {
-            buttonRelease(BTN_JUMP);
-        }
+    if (!(*buttonsLive & BTN_BLUE))
+    {
+        buttonPress(BTN_JUMP);
+    }
+    else
+    {
+        buttonRelease(BTN_JUMP);
     }
     interrupts();
 }
@@ -260,16 +263,16 @@ void handleJoystickDirections(TwoButtonJoystick &j)
 
     byte buttonsTmp = 0xFF;
 
-    if (wiicontr.getButtonX() == 1)
+    if (wiicontr.getButtonY() == 1)
         buttonsTmp &= ~BTN_GREEN;
 
-    if (wiicontr.getButtonY() == 1)
+    if (wiicontr.getButtonB() == 1)
         buttonsTmp &= ~BTN_RED;
 
-    if (wiicontr.getButtonB() == 1)
+    if (wiicontr.getButtonA() == 1)
         buttonsTmp &= ~BTN_BLUE;
 
-    if (wiicontr.getButtonA() == 1)
+    if (wiicontr.getButtonX() == 1)
         buttonsTmp &= ~BTN_YELLOW;
 
     if (wiicontr.getButtonPlus() == 1)
@@ -281,7 +284,6 @@ void handleJoystickDirections(TwoButtonJoystick &j)
     if (wiicontr.getButtonZRight() == 1)
         buttonsTmp &= ~BTN_FRONT_R;
 
-    // Atomic operation, interrupt either happens before or after this
     *buttonsLive = buttonsTmp;
 }
 
@@ -289,32 +291,56 @@ void stateMachine()
 {
     static unsigned long stateEnteredTime = 0;
     TwoButtonJoystick j = {false, false, false, false, false, false};
-    if (*state == ST_NO_CONTROLLER)
+    static unsigned long lastPoll = 0;
+
+    if (*state != ST_NO_CONTROLLER)
     {
-        if (wiicontr.readData())
+        if (millis() - lastPoll > 1000U / PAD_POLLING_FREQ)
         {
-            *state = ST_JOYSTICK;
-            enableCD32Trigger();
-            debugln(F("Connection established"));
-        }
-        else
-        {
-            *state = ST_NO_CONTROLLER;
-            *buttonsLive = 0x7F; // No ID sequence, all buttons released
-            disableCD32Trigger();
-            debugln(F("Controller connection lost"));
+            if (wiicontr.readData())
+            {
+                *state = ST_JOYSTICK;
+                debugln(F("Connection established"));
+            }
+            else
+            {
+                *state = ST_NO_CONTROLLER;
+                *buttonsLive = 0x7F; // No ID sequence, all buttons released
+                debugln(F("Controller connection lost"));
+            }
+            lastPoll = millis();
         }
     }
 
     switch (*state)
     {
     case ST_NO_CONTROLLER:
-        // *state = ST_JOYSTICK;
+        if (wiicontr.readData())
+        {
+            // All direction pins to Hi-Z without pull-up
+            // fastDigitalWrite(BTN_UP, LOW);
+            // fastPinMode(BTN_UP, INPUT);
+            // fastDigitalWrite(BTN_DOWN, LOW);
+            // fastPinMode(BTN_DOWN, INPUT);
+            // fastDigitalWrite(BTN_LEFT, LOW);
+            // fastPinMode(BTN_LEFT, INPUT);
+            // fastDigitalWrite(BTN_RIGHT, LOW);
+            // fastPinMode(BTN_RIGHT, INPUT);
+
+            // fastDigitalWrite(BTN_FIRE, LOW);
+            // fastPinMode(BTN_FIRE, INPUT);
+            // fastDigitalWrite(BTN_JUMP, LOW);
+            // fastPinMode(BTN_JUMP, INPUT);
+
+            // Be ready to switch to ST_CD32
+            enableCD32Trigger();
+
+            *state = ST_JOYSTICK;
+        }
         break;
     case ST_JOYSTICK:
         handleJoystickDirections(j);
         handleJoystickButtons(j);
-        enableCD32Trigger();
         break;
     case ST_CD32:
     {
@@ -341,13 +367,7 @@ void stateMachine()
 
 void mapJoystickNormal(TwoButtonJoystick &j)
 {
-    if (!wiicontr.readData())
-    {
-        *state = ST_NO_CONTROLLER;
-        fastDigitalWrite(LED_BUILTIN, LOW);
-        return;
-    }
-
+    wiicontr.readData();
     // Use both analog axes
     int xl = wiicontr.getJoyXLeft(); // 0-63
     int yl = 63 - wiicontr.getJoyYLeft();
@@ -407,51 +427,3 @@ void loop()
 {
     stateMachine();
 }
-
-// void loop()
-// {
-//     if (wiicontr.readData())
-//     {
-//         if (wiicontr.getButtonB() == 1 || wiicontr.getButtonX() == 1)
-//         {
-//             fastDigitalWrite(BTN_FIRE, LOW);
-//             fastDigitalWrite(LED_BUILTIN, HIGH);
-//         }
-//         else
-//         {
-//             fastDigitalWrite(BTN_FIRE, HIGH);
-//             fastDigitalWrite(LED_BUILTIN, LOW);
-//         }
-
-//         if (wiicontr.getButtonA() == 1 || wiicontr.getButtonY() == 1)
-//             fastDigitalWrite(BTN_JUMP, LOW);
-//         else
-//             fastDigitalWrite(BTN_JUMP, HIGH);
-
-//         int xl = wiicontr.getJoyXLeft(); // 0-63
-//         int yl = 63 - wiicontr.getJoyYLeft();
-//         //
-//         int xr = wiicontr.getJoyXRight(); // 0 - 31
-//         int yr = wiicontr.getJoyYRight();
-
-//         if (wiicontr.getPadUp() == 1 || yl < 20 || yr > 25)
-//             fastDigitalWrite(BTN_UP, LOW);
-//         else
-//             fastDigitalWrite(BTN_UP, HIGH);
-
-//         if (wiicontr.getPadDown() == 1 || yl > 40 || yr < 8)
-//             fastDigitalWrite(BTN_DOWN, LOW);
-//         else
-//             fastDigitalWrite(BTN_DOWN, HIGH);
-
-//         if (wiicontr.getPadLeft() == 1 || xl < 20 || xr < 8)
-//             fastDigitalWrite(BTN_LEFT, LOW);
-//         else
-//             fastDigitalWrite(BTN_LEFT, HIGH);
-
-//         if (wiicontr.getPadRight() == 1 || xl > 40 || xr > 25)
-//             fastDigitalWrite(BTN_RIGHT, LOW);
-//         else
-//             fastDigitalWrite(BTN_RIGHT, HIGH);
-//     }
-// }
