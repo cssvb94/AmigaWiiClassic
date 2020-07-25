@@ -1,11 +1,8 @@
 #pragma once
-
 #include <Arduino.h>
 
 #define ENABLE_FAST_IO
-
 #ifdef ENABLE_FAST_IO
-// https://github.com/greiman/DigitalIO
 #include <DigitalIO.h>
 #else
 #define fastDigitalRead(x) digitalRead(x)
@@ -13,6 +10,9 @@
 #define fastPinMode(x, y) pinMode(x, y)
 #endif
 
+#include <WiiChuck.h>
+
+// #define ENABLE_SERIAL_DEBUG
 #ifdef ENABLE_SERIAL_DEBUG
 #include <avr/pgmspace.h>
 typedef const __FlashStringHelper *FlashStr;
@@ -28,7 +28,6 @@ typedef const byte *PGM_BYTES_P;
 #define debugln(...)
 #endif
 
-#include <WiiChuck.h>
 Accessory wiicontr;
 
 // Button bits for CD32 mode
@@ -40,45 +39,59 @@ const byte BTN_FRONT_R = 1U << 4U; // Front Right Button
 const byte BTN_FRONT_L = 1U << 5U; // Front Left Button
 const byte BTN_START = 1U << 6U;   // Start/Pause Button
 
-const byte BTN_FIRE = 2;
-const byte BTN_JUMP = 3;
+const byte TIMEOUT_CD32_MODE = 100U;
+
+/*
+Amiga Joystick pinout
+1 - Up          pin 4 green
+2 - Down        pin 5 blue
+3 - Left        pin 6 purple
+4 - Right       pin 7 grey
+5 - Joy/Pad     pin 2 orange
+6 - BTN1        pin 3 white
+7 - +5 VDC      pin 
+8 - GROUND      pin 
+9 - BTN2        pin 8 brown
+
+SCL - green  - A4
+SDA - yellow - A5
+*/
+
+/** Controller mode input pin
+ *  
+ * This pin switches between Amiga (HIGH) and CD32 (LOW) mode.
+ * 
+ * It also triggers the loading of the button status shift register.
+ */
+const byte PIN_PADMODE = 2; // Amiga Pin 5
+
+const byte BTN_FIRE = 3; // BTN1 - Arduino INT1
 const byte BTN_UP = 4;
 const byte BTN_DOWN = 5;
 const byte BTN_LEFT = 6;
 const byte BTN_RIGHT = 7;
+const byte BTN_JUMP = 8; // BTN2
+
+/** Shift register output pin for CD32 mode
+ * 
+ * When in CD32 mode, button status is saved to an 8-bit register that gets
+ * shifted out one bit at a time through this pin.
+ */
+const byte PIN_BTNREGOUT = BTN_JUMP;
+
+/** Shift register clock input pin for CD32 mode
+ * 
+ * The shifting is clocked by rising edges on this pin.
+ */
+const byte PIN_BTNREGCLK = BTN_FIRE;
 
 #define ATTR_PACKED __attribute__((packed))
 
 enum ATTR_PACKED State
 {
-    ST_NO_CONTROLLER, //!< No controller connected
-    ST_FIRST_READ,    //!< First time the controller is read
-
-    // Main functioning modes
-    ST_JOYSTICK,      //!< Two-button joystick mode
-    ST_MOUSE,         //!< Mouse mode
-    ST_CD32,          //!< CD32-controller mode
-    ST_JOYSTICK_TEMP, //!< Just come out of CD32 mode, will it last?
-
-    // States to select mapping or go into programming mode
-    ST_SELECT_HELD,         //!< Select being held
-    ST_SELECT_AND_BTN_HELD, //!< Select + mapping button being held
-    ST_ENABLE_MAPPING,      //!< Select + mapping button released, enable mapping
-
-    // States for programming mode
-    ST_WAIT_SELECT_RELEASE,          //!< Select released, entering programming mode
-    ST_WAIT_BUTTON_PRESS,            //!< Programmable button pressed
-    ST_WAIT_BUTTON_RELEASE,          //!< Programmable button released
-    ST_WAIT_COMBO_PRESS,             //!< Combo pressed
-    ST_WAIT_COMBO_RELEASE,           //!< Combo released
-    ST_WAIT_SELECT_RELEASE_FOR_EXIT, //!< Wait for select to be released to go back to joystick mode
-
-// States for factory reset
-#ifndef DISABLE_FACTORY_RESET
-    ST_FACTORY_RESET_WAIT_1,
-    ST_FACTORY_RESET_WAIT_2,
-    ST_FACTORY_RESET_PERFORM
-#endif
+    ST_NO_CONTROLLER, // No controller connected
+    ST_JOYSTICK,      // Two-button joystick mode
+    ST_CD32,          // CD32-controller mode
 };
 
 struct TwoButtonJoystick
@@ -92,3 +105,8 @@ struct TwoButtonJoystick
 };
 
 typedef void (*JoyMappingFunc)(TwoButtonJoystick &j);
+
+volatile byte *buttonsLive = &GPIOR0;
+volatile byte *isrButtons = &GPIOR1;
+
+volatile State *state = reinterpret_cast<volatile State *>(&GPIOR2);
